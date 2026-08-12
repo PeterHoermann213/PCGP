@@ -104,16 +104,24 @@ def sample_parameters(log_target_fn, domain, num_samples=5000, device="cpu", ord
     basis = dt.Legendre(order=order)
     bases = dt.ApproxBases(basis, dim=1)  # 1D parameter space
 
-    tt = dt.TT()
+    tt = dt.TT(options=dt.TTOptions(verbose=0))
     ftt = dt.FTT(bases, tt)
 
     # Construct DIRT Approximation
     dirt = dt.DIRT(target_func, preconditioner, ftt)
 
-    # create smaples
-    samples = dirt.sample(num_samples)
+    rs = reference.random(n=num_samples, d=1)
 
-    return samples.squeeze()
+    # Transform the samples according to SIRT approximation
+    x_samples, neglogfxs_sirt = dirt.eval_irt(rs)
+    # Compute potential function of the (unnormalised) target density at each SIRT sample
+    neglogfxs_exact = target_func(x_samples)
+
+    res = dt.run_independence_sampler(x_samples, neglogfxs_sirt, neglogfxs_exact)
+    # create smaples
+    #samples = dirt.sample(num_samples)
+
+    return res
 
 
 
@@ -300,22 +308,22 @@ def log_target_original(a):
 # --- run deep_tensor sampler ------------------------------------------------
 # TODO: specify the domain [a_min, a_max] over which to sample
 a_min = 1.0
-a_max = 7.0
+a_max = 100000.0
 
 # TODO: sample_parameters should return dictionary of samples drawn from the likelihood
 #       distribution of the parameters, using the DIRT algorithm implemented in helpers_*.py
 # Pass log_target directly into the sampler
 
-samples = sample_parameters(
+samples_result = sample_parameters(
     log_target_fn=log_target_original,
     domain=[a_min, a_max],
     num_samples=1000,
     device=device,
-    order=10#30
+    order=30
 )
 
-
-samples_np = samples.detach().cpu().numpy()
+samples = samples_result.xs
+#samples_np = samples.detach().cpu().numpy()
 # --- evaluate results -------------------------------------------------------
 print(f"True a:       {a_true:.4f}")
 print(f"Mean of samples:  {samples.mean():.4f}")
